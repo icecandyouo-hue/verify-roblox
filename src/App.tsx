@@ -648,7 +648,7 @@ function App() {
                       <AlertCircle className="w-16 h-16 text-red-600 mx-auto mb-4" />
                       <h3 className="text-xl font-semibold text-red-800 mb-2">驗證未通過</h3>
                       <p className="text-red-700 mb-4">
-                        請檢查上述失敗項目，修正後重新驗證。
+                        請檢查上述失敗項目，修正後重新驗證，若一直失敗可改為手動驗證。
                       </p>
                     </div>
                   </div>
