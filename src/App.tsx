@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, Upload, User, Target, Home, AlertCircle, CheckCircle, Clipboard, Copy, Download } from 'lucide-react';
+import { Check, Upload, User, Target, Home, AlertCircle, CheckCircle, Clipboard, Copy } from 'lucide-react';
 import Tesseract from 'tesseract.js';
 
 interface VerificationData {
@@ -248,108 +248,6 @@ function App() {
       alert('截圖失敗，請稍後再試');
     } finally {
       setIsCapturing(false);
-    }
-  };
-
-  const copyOriginalScreenshots = async () => {
-    if (!data.gameScreenshot || !data.robloxScreenshot) return;
-    
-    try {
-      const gameImageUrl = URL.createObjectURL(data.gameScreenshot);
-      const robloxImageUrl = URL.createObjectURL(data.robloxScreenshot);
-      
-      // 創建一個臨時的 canvas 來合併兩張圖片
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      
-      const gameImg = new Image();
-      const robloxImg = new Image();
-      
-      await new Promise((resolve, reject) => {
-        let loadedCount = 0;
-        
-        const onLoad = () => {
-          loadedCount++;
-          if (loadedCount === 2) {
-            // 設置 canvas 尺寸
-            const maxWidth = Math.max(gameImg.width, robloxImg.width);
-            canvas.width = maxWidth;
-            canvas.height = gameImg.height + robloxImg.height + 60; // 額外空間給標題
-            
-            if (!ctx) {
-              reject(new Error('無法獲取 canvas context'));
-              return;
-            }
-            
-            // 白色背景
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            // 添加標題
-            ctx.fillStyle = '#000000';
-            ctx.font = 'bold 24px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(`${data.playerName} 的驗證截圖`, canvas.width / 2, 30);
-            
-            // 繪製遊戲截圖
-            ctx.font = '18px Arial';
-            ctx.fillText('遊戲擊殺截圖', canvas.width / 2, 70);
-            ctx.drawImage(gameImg, (canvas.width - gameImg.width) / 2, 80);
-            
-            // 繪製 Roblox 截圖
-            const robloxY = 80 + gameImg.height + 40;
-            ctx.fillText('Roblox 主頁截圖', canvas.width / 2, robloxY - 10);
-            ctx.drawImage(robloxImg, (canvas.width - robloxImg.width) / 2, robloxY);
-            
-            resolve(canvas);
-          }
-        };
-        
-        gameImg.onload = onLoad;
-        robloxImg.onload = onLoad;
-        gameImg.onerror = reject;
-        robloxImg.onerror = reject;
-        
-        gameImg.src = gameImageUrl;
-        robloxImg.src = robloxImageUrl;
-      });
-      
-      // 轉換為 blob 並複製
-      canvas.toBlob(async (blob) => {
-        if (!blob) return;
-        
-        try {
-          await navigator.clipboard.write([
-            new ClipboardItem({
-              'image/png': blob
-            })
-          ]);
-          setCopySuccess('screenshots');
-          setTimeout(() => setCopySuccess(null), 3000);
-        } catch (error) {
-          console.error('複製截圖失敗:', error);
-          // 提供下載選項
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${data.playerName}_驗證截圖_${new Date().toISOString().slice(0, 10)}.png`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-          
-          setCopySuccess('download');
-          setTimeout(() => setCopySuccess(null), 3000);
-        }
-      }, 'image/png');
-      
-      // 清理 URL
-      URL.revokeObjectURL(gameImageUrl);
-      URL.revokeObjectURL(robloxImageUrl);
-      
-    } catch (error) {
-      console.error('處理截圖失敗:', error);
-      alert('處理截圖失敗，請稍後再試');
     }
   };
 
@@ -759,7 +657,7 @@ function App() {
                 {/* 複製功能區域 */}
                 <div className="mt-6 space-y-4">
                   <h4 className="text-lg font-medium text-gray-800 text-center">複製給管理員</h4>
-                  <div className="flex flex-col sm:flex-row justify-center space-y-2 sm:space-y-0 sm:space-x-4">
+                  <div className="flex justify-center">
                     <button
                       onClick={copyVerificationScreenshot}
                       disabled={isCapturing}
@@ -777,18 +675,6 @@ function App() {
                          copySuccess === 'screenshot' ? '驗證結果已複製！' :
                          copySuccess === 'download' ? '已下載截圖！' : '複製驗證結果截圖'}
                       </span>
-                    </button>
-                    
-                    <button
-                      onClick={copyOriginalScreenshots}
-                      className={`inline-flex items-center space-x-2 px-6 py-3 rounded-lg transition-all ${
-                        copySuccess === 'screenshots' 
-                          ? 'bg-green-600 text-white' 
-                          : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
-                      }`}
-                    >
-                      <Download className="w-5 h-5" />
-                      <span>{copySuccess === 'screenshots' ? '原始截圖已複製！' : '複製原始截圖'}</span>
                     </button>
                   </div>
                   <p className="text-sm text-gray-600 text-center">
