@@ -29,6 +29,7 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
+  const [isCapturing, setIsCapturing] = useState(false);
 
   const handleFileUpload = (field: 'gameScreenshot' | 'robloxScreenshot') => (
     event: React.ChangeEvent<HTMLInputElement>
@@ -180,31 +181,175 @@ function App() {
     setIsProcessing(false);
   };
 
-  const copyVerificationResult = async () => {
-    if (!result || !data.playerName) return;
-
-    const verificationText = `驗證結果
-
-${result.overallValid ? '✅ 驗證通過' : '❌ 驗證失敗'}
-
-✅ 步驟 1: 玩家名稱
-玩家名稱: ${data.playerName}
-
-${result.step2Valid ? '✅' : '❌'} 步驟 2: 遊戲擊殺截圖
-檢測到的擊殺數: ${result.step2KillCount?.toLocaleString() || '無法識別'}
-是否找到玩家名稱: ${result.step2PlayerFound ? '✓ 是' : '✗ 否'}
-擊殺數要求: ${result.step2KillCount && result.step2KillCount >= 3000 ? '✓ 達標' : '✗ 未達標（需≥3000）'}
-
-${result.step3Valid ? '✅' : '❌'} 步驟 3: Roblox 主頁截圖
-用戶名匹配: ${result.step3NameMatch ? '✓ 匹配' : '✗ 不匹配'}`;
-
+  const copyVerificationScreenshot = async () => {
+    if (!result) return;
+    
+    setIsCapturing(true);
+    
     try {
-      await navigator.clipboard.writeText(verificationText);
-      setCopySuccess('text');
-      setTimeout(() => setCopySuccess(null), 2000);
-    } catch (err) {
-      console.error('複製失敗:', err);
-      alert('複製失敗，請手動複製內容');
+      // 等待一小段時間確保 UI 更新完成
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const resultElement = document.getElementById('verification-result');
+      if (!resultElement) {
+        throw new Error('找不到驗證結果元素');
+      }
+
+      // 動態導入 html2canvas
+      const html2canvas = (await import('html2canvas')).default;
+      
+      // 生成截圖
+      const canvas = await html2canvas(resultElement, {
+        backgroundColor: '#ffffff',
+        scale: 2, // 提高解析度
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        width: resultElement.scrollWidth,
+        height: resultElement.scrollHeight,
+      });
+      
+      // 將 canvas 轉換為 blob
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          throw new Error('無法生成截圖');
+        }
+        
+        try {
+          // 複製到剪貼簿
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              'image/png': blob
+            })
+          ]);
+          
+          setCopySuccess('screenshot');
+          setTimeout(() => setCopySuccess(null), 3000);
+        } catch (clipboardError) {
+          console.error('複製到剪貼簿失敗:', clipboardError);
+          
+          // 如果剪貼簿失敗，提供下載選項
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `驗證結果_${data.playerName}_${new Date().toISOString().slice(0, 10)}.png`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          
+          setCopySuccess('download');
+          setTimeout(() => setCopySuccess(null), 3000);
+        }
+      }, 'image/png');
+      
+    } catch (error) {
+      console.error('截圖失敗:', error);
+      alert('截圖失敗，請稍後再試');
+    } finally {
+      setIsCapturing(false);
+    }
+  };
+
+  const copyOriginalScreenshots = async () => {
+    if (!data.gameScreenshot || !data.robloxScreenshot) return;
+    
+    try {
+      const gameImageUrl = URL.createObjectURL(data.gameScreenshot);
+      const robloxImageUrl = URL.createObjectURL(data.robloxScreenshot);
+      
+      // 創建一個臨時的 canvas 來合併兩張圖片
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      const gameImg = new Image();
+      const robloxImg = new Image();
+      
+      await new Promise((resolve, reject) => {
+        let loadedCount = 0;
+        
+        const onLoad = () => {
+          loadedCount++;
+          if (loadedCount === 2) {
+            // 設置 canvas 尺寸
+            const maxWidth = Math.max(gameImg.width, robloxImg.width);
+            canvas.width = maxWidth;
+            canvas.height = gameImg.height + robloxImg.height + 60; // 額外空間給標題
+            
+            if (!ctx) {
+              reject(new Error('無法獲取 canvas context'));
+              return;
+            }
+            
+            // 白色背景
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // 添加標題
+            ctx.fillStyle = '#000000';
+            ctx.font = 'bold 24px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${data.playerName} 的驗證截圖`, canvas.width / 2, 30);
+            
+            // 繪製遊戲截圖
+            ctx.font = '18px Arial';
+            ctx.fillText('遊戲擊殺截圖', canvas.width / 2, 70);
+            ctx.drawImage(gameImg, (canvas.width - gameImg.width) / 2, 80);
+            
+            // 繪製 Roblox 截圖
+            const robloxY = 80 + gameImg.height + 40;
+            ctx.fillText('Roblox 主頁截圖', canvas.width / 2, robloxY - 10);
+            ctx.drawImage(robloxImg, (canvas.width - robloxImg.width) / 2, robloxY);
+            
+            resolve(canvas);
+          }
+        };
+        
+        gameImg.onload = onLoad;
+        robloxImg.onload = onLoad;
+        gameImg.onerror = reject;
+        robloxImg.onerror = reject;
+        
+        gameImg.src = gameImageUrl;
+        robloxImg.src = robloxImageUrl;
+      });
+      
+      // 轉換為 blob 並複製
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        
+        try {
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              'image/png': blob
+            })
+          ]);
+          setCopySuccess('screenshots');
+          setTimeout(() => setCopySuccess(null), 3000);
+        } catch (error) {
+          console.error('複製截圖失敗:', error);
+          // 提供下載選項
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${data.playerName}_驗證截圖_${new Date().toISOString().slice(0, 10)}.png`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          
+          setCopySuccess('download');
+          setTimeout(() => setCopySuccess(null), 3000);
+        }
+      }, 'image/png');
+      
+      // 清理 URL
+      URL.revokeObjectURL(gameImageUrl);
+      URL.revokeObjectURL(robloxImageUrl);
+      
+    } catch (error) {
+      console.error('處理截圖失敗:', error);
+      alert('處理截圖失敗，請稍後再試');
     }
   };
 
@@ -557,69 +702,101 @@ ${result.step3Valid ? '✅' : '❌'} 步驟 3: Roblox 主頁截圖
                 </div>
 
                 {result.overallValid && (
-                  <div className="bg-green-50 p-6 rounded-lg border border-green-200">
+                  <div id="verification-result" className="bg-green-50 p-6 rounded-lg border border-green-200">
                     <div className="text-center">
                       <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
                       <h3 className="text-xl font-semibold text-green-800 mb-2">恭喜！驗證通過</h3>
                       <p className="text-green-700">
                         玩家 "{data.playerName}" 已成功通過所有驗證步驟。
                       </p>
-                      
-                      {/* 複製和分享功能 */}
-                      <div className="mt-6 space-y-3">
-                        <h4 className="text-lg font-medium text-green-800">複製截圖給管理員</h4>
-                        <div className="flex justify-center">
-                          <button
-                            onClick={copyVerificationResult}
-                            className={`inline-flex items-center space-x-2 px-6 py-3 rounded-lg transition-all ${
-                              copySuccess === 'text' 
-                                ? 'bg-green-600 text-white' 
-                                : 'bg-green-100 hover:bg-green-200 text-green-800'
-                            }`}
-                          >
-                            <Copy className="w-5 h-5" />
-                            <span>{copySuccess === 'text' ? '已複製！' : '複製驗證結果'}</span>
-                          </button>
+                    </div>
+                    
+                    {/* 詳細驗證信息 */}
+                    <div className="mt-6 space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                        <div className="bg-white p-4 rounded-lg">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <CheckCircle className="w-4 h-4 text-green-600" />
+                            <span className="font-medium">步驟 1: 玩家名稱</span>
+                          </div>
+                          <p>玩家名稱: {data.playerName}</p>
                         </div>
-                        <p className="text-sm text-green-600 mt-2">
-                          💡 複製驗證結果後可直接貼到 Discord 給管理員查看
-                        </p>
+                        
+                        <div className="bg-white p-4 rounded-lg">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <CheckCircle className="w-4 h-4 text-green-600" />
+                            <span className="font-medium">步驟 2: 遊戲擊殺截圖</span>
+                          </div>
+                          <p>檢測到的擊殺數: {result.step2KillCount?.toLocaleString()}</p>
+                          <p>是否找到玩家名稱: ✓ 是</p>
+                          <p>擊殺數要求: ✓ 達標</p>
+                        </div>
+                        
+                        <div className="bg-white p-4 rounded-lg">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <CheckCircle className="w-4 h-4 text-green-600" />
+                            <span className="font-medium">步驟 3: Roblox 主頁截圖</span>
+                          </div>
+                          <p>用戶名匹配: ✓ 匹配</p>
+                        </div>
                       </div>
                     </div>
                   </div>
                 )}
 
                 {!result.overallValid && (
-                  <div className="bg-red-50 p-6 rounded-lg border border-red-200">
+                  <div id="verification-result" className="bg-red-50 p-6 rounded-lg border border-red-200">
                     <div className="text-center">
                       <AlertCircle className="w-16 h-16 text-red-600 mx-auto mb-4" />
                       <h3 className="text-xl font-semibold text-red-800 mb-2">驗證未通過</h3>
                       <p className="text-red-700 mb-4">
                         請檢查上述失敗項目，修正後重新驗證。
                       </p>
-                      
-                      {/* 失敗時也可以複製結果給管理員查看 */}
-                      <div className="mt-4">
-                        <button
-                          onClick={copyVerificationResult}
-                          className={`inline-flex items-center space-x-2 px-4 py-2 rounded-lg transition-all mb-3 ${
-                            copySuccess === 'text' 
-                              ? 'bg-red-600 text-white' 
-                              : 'bg-red-100 hover:bg-red-200 text-red-800'
-                          }`}
-                        >
-                          <Copy className="w-4 h-4" />
-                          <span>{copySuccess === 'text' ? '已複製！' : '複製驗證結果'}</span>
-                        </button>
-                        <p className="text-sm text-red-600">
-                          請修正失敗項目後重新驗證，或聯繫管理員協助
-                        </p>
-                      </div>
                     </div>
                   </div>
                 )}
 
-                <div className="flex justify-center">
+                {/* 複製功能區域 */}
+                <div className="mt-6 space-y-4">
+                  <h4 className="text-lg font-medium text-gray-800 text-center">複製給管理員</h4>
+                  <div className="flex flex-col sm:flex-row justify-center space-y-2 sm:space-y-0 sm:space-x-4">
+                    <button
+                      onClick={copyVerificationScreenshot}
+                      disabled={isCapturing}
+                      className={`inline-flex items-center space-x-2 px-6 py-3 rounded-lg transition-all ${
+                        copySuccess === 'screenshot' 
+                          ? 'bg-green-600 text-white' 
+                          : copySuccess === 'download'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-indigo-100 hover:bg-indigo-200 text-indigo-800'
+                      } ${isCapturing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      <Copy className="w-5 h-5" />
+                      <span>
+                        {isCapturing ? '正在截圖...' : 
+                         copySuccess === 'screenshot' ? '驗證結果已複製！' :
+                         copySuccess === 'download' ? '已下載截圖！' : '複製驗證結果截圖'}
+                      </span>
+                    </button>
+                    
+                    <button
+                      onClick={copyOriginalScreenshots}
+                      className={`inline-flex items-center space-x-2 px-6 py-3 rounded-lg transition-all ${
+                        copySuccess === 'screenshots' 
+                          ? 'bg-green-600 text-white' 
+                          : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
+                      }`}
+                    >
+                      <Download className="w-5 h-5" />
+                      <span>{copySuccess === 'screenshots' ? '原始截圖已複製！' : '複製原始截圖'}</span>
+                    </button>
+                  </div>
+                  <p className="text-sm text-gray-600 text-center">
+                    💡 複製截圖後可直接貼到 Discord 給管理員查看，無法造假
+                  </p>
+                </div>
+
+                <div className="flex justify-center mt-6">
                   <button
                     onClick={resetForm}
                     className="px-8 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all font-medium"
