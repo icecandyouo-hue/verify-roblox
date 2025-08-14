@@ -183,22 +183,20 @@ function App() {
   const copyVerificationResult = async () => {
     if (!result || !data.playerName) return;
 
-    const verificationText = `
-🎮 Roblox 玩家驗證結果
+    const verificationText = `驗證結果
 
-👤 玩家名稱: ${data.playerName}
-🎯 總擊殺數: ${result.step2KillCount?.toLocaleString() || 'N/A'}
-✅ 驗證狀態: ${result.overallValid ? '通過' : '失敗'}
+${result.overallValid ? '✅ 驗證通過' : '❌ 驗證失敗'}
 
-📋 詳細結果:
-• 玩家名稱驗證: ${result.step1Valid ? '✅ 通過' : '❌ 失敗'}
-• 擊殺數驗證: ${result.step2Valid ? '✅ 通過' : '❌ 失敗'} (需≥3000)
-• 身份驗證: ${result.step3Valid ? '✅ 通過' : '❌ 失敗'}
+✅ 步驟 1: 玩家名稱
+玩家名稱: ${data.playerName}
 
-${result.overallValid ? '🎉 該玩家已通過所有驗證要求，建議批准申請。' : '⚠️ 該玩家未通過驗證要求，請重新驗證。'}
+${result.step2Valid ? '✅' : '❌'} 步驟 2: 遊戲擊殺截圖
+檢測到的擊殺數: ${result.step2KillCount?.toLocaleString() || '無法識別'}
+是否找到玩家名稱: ${result.step2PlayerFound ? '✓ 是' : '✗ 否'}
+擊殺數要求: ${result.step2KillCount && result.step2KillCount >= 3000 ? '✓ 達標' : '✗ 未達標（需≥3000）'}
 
-⏰ 驗證時間: ${new Date().toLocaleString('zh-TW')}
-    `.trim();
+${result.step3Valid ? '✅' : '❌'} 步驟 3: Roblox 主頁截圖
+用戶名匹配: ${result.step3NameMatch ? '✓ 匹配' : '✗ 不匹配'}`;
 
     try {
       await navigator.clipboard.writeText(verificationText);
@@ -207,68 +205,6 @@ ${result.overallValid ? '🎉 該玩家已通過所有驗證要求，建議批�
     } catch (err) {
       console.error('複製失敗:', err);
       alert('複製失敗，請手動複製內容');
-    }
-  };
-
-  const copyGameScreenshot = async () => {
-    if (!data.gameScreenshot) return;
-    
-    try {
-      // 將文件轉換為 blob
-      const blob = new Blob([data.gameScreenshot], { type: data.gameScreenshot.type });
-      
-      // 創建 ClipboardItem
-      const clipboardItem = new ClipboardItem({
-        [data.gameScreenshot.type]: blob
-      });
-      
-      // 寫入剪貼簿
-      await navigator.clipboard.write([clipboardItem]);
-      setCopySuccess('gameScreenshot');
-      setTimeout(() => setCopySuccess(null), 2000);
-    } catch (err) {
-      console.error('複製遊戲截圖失敗:', err);
-      // 嘗試替代方法：創建下載連結讓用戶手動保存
-      const url = URL.createObjectURL(data.gameScreenshot);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${data.playerName}_遊戲截圖.${data.gameScreenshot.name.split('.').pop()}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      alert('無法直接複製到剪貼簿，已自動下載截圖');
-    }
-  };
-
-  const copyRobloxScreenshot = async () => {
-    if (!data.robloxScreenshot) return;
-    
-    try {
-      // 將文件轉換為 blob
-      const blob = new Blob([data.robloxScreenshot], { type: data.robloxScreenshot.type });
-      
-      // 創建 ClipboardItem
-      const clipboardItem = new ClipboardItem({
-        [data.robloxScreenshot.type]: blob
-      });
-      
-      // 寫入剪貼簿
-      await navigator.clipboard.write([clipboardItem]);
-      setCopySuccess('robloxScreenshot');
-      setTimeout(() => setCopySuccess(null), 2000);
-    } catch (err) {
-      console.error('複製 Roblox 截圖失敗:', err);
-      // 嘗試替代方法：創建下載連結讓用戶手動保存
-      const url = URL.createObjectURL(data.robloxScreenshot);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${data.playerName}_Roblox截圖.${data.robloxScreenshot.name.split('.').pop()}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      alert('無法直接複製到剪貼簿，已自動下載截圖');
     }
   };
 
@@ -632,33 +568,21 @@ ${result.overallValid ? '🎉 該玩家已通過所有驗證要求，建議批�
                       {/* 複製和分享功能 */}
                       <div className="mt-6 space-y-3">
                         <h4 className="text-lg font-medium text-green-800">複製截圖給管理員</h4>
-                        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                        <div className="flex justify-center">
                           <button
-                            onClick={copyGameScreenshot}
-                            className={`inline-flex items-center space-x-2 px-4 py-2 rounded-lg transition-all ${
-                              copySuccess === 'gameScreenshot' 
+                            onClick={copyVerificationResult}
+                            className={`inline-flex items-center space-x-2 px-6 py-3 rounded-lg transition-all ${
+                              copySuccess === 'text' 
                                 ? 'bg-green-600 text-white' 
                                 : 'bg-green-100 hover:bg-green-200 text-green-800'
                             }`}
                           >
-                            <Clipboard className="w-4 h-4" />
-                            <span>{copySuccess === 'gameScreenshot' ? '已複製！' : '複製遊戲截圖'}</span>
-                          </button>
-                          
-                          <button
-                            onClick={copyRobloxScreenshot}
-                            className={`inline-flex items-center space-x-2 px-4 py-2 rounded-lg transition-all ${
-                              copySuccess === 'robloxScreenshot' 
-                                ? 'bg-green-600 text-white' 
-                                : 'bg-green-100 hover:bg-green-200 text-green-800'
-                            }`}
-                          >
-                            <Clipboard className="w-4 h-4" />
-                            <span>{copySuccess === 'robloxScreenshot' ? '已複製！' : '複製Roblox截圖'}</span>
+                            <Copy className="w-5 h-5" />
+                            <span>{copySuccess === 'text' ? '已複製！' : '複製驗證結果'}</span>
                           </button>
                         </div>
                         <p className="text-sm text-green-600 mt-2">
-                          💡 複製截圖後可直接貼到 Discord 給管理員驗證
+                          💡 複製驗證結果後可直接貼到 Discord 給管理員查看
                         </p>
                       </div>
                     </div>
@@ -676,6 +600,17 @@ ${result.overallValid ? '🎉 該玩家已通過所有驗證要求，建議批�
                       
                       {/* 失敗時也可以複製結果給管理員查看 */}
                       <div className="mt-4">
+                        <button
+                          onClick={copyVerificationResult}
+                          className={`inline-flex items-center space-x-2 px-4 py-2 rounded-lg transition-all mb-3 ${
+                            copySuccess === 'text' 
+                              ? 'bg-red-600 text-white' 
+                              : 'bg-red-100 hover:bg-red-200 text-red-800'
+                          }`}
+                        >
+                          <Copy className="w-4 h-4" />
+                          <span>{copySuccess === 'text' ? '已複製！' : '複製驗證結果'}</span>
+                        </button>
                         <p className="text-sm text-red-600">
                           請修正失敗項目後重新驗證，或聯繫管理員協助
                         </p>
